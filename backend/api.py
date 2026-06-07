@@ -31,11 +31,6 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.pipeline import make_pipeline
 from sklearn import metrics
 
-try:
-    import tensorflow as tf
-    TENSORFLOW_AVAILABLE = True
-except Exception:
-    TENSORFLOW_AVAILABLE = False
 
 app = FastAPI(title="ML Platform API")
 
@@ -70,12 +65,6 @@ def new_session_data() -> dict:
         "y_col": "",
         "results": [],
         "poly_transformer": None,
-        "tf_model": None,
-        "tf_scaler": None,
-        "tf_es_clasificacion": False,
-        "tf_clases": None,
-        "tf_trained_x_cols": [],
-        "tf_trained_y_col": "",
         "_arbol_companion": None,
         "_lasso_companion": None,
     }
@@ -351,63 +340,6 @@ def train_model(req: TrainRequest):
             session["last_model"] = modelo
             session["is_regression"] = False
 
-        elif k == "tensorflow_nn":
-            if not TENSORFLOW_AVAILABLE:
-                raise HTTPException(
-                    status_code=400,
-                    detail="TensorFlow no esta disponible. En Python 3.13 aun no tiene soporte oficial en Windows. Instala Python 3.11 o 3.12 para usarlo."
-                )
-            Xtr_f = X_train.astype(float)
-            Xts_f = X_test.astype(float)
-            es_clf = (df[req.y_col].dtype == "object" or not np.issubdtype(np.array(y_train).dtype, np.number))
-
-            if es_clf:
-                clases = np.unique(np.concatenate([y_train, y_test]))
-                mapa = {c: i for i, c in enumerate(clases)}
-                ytr_c = np.array([mapa[c] for c in y_train])
-                yts_c = np.array([mapa[c] for c in y_test])
-                scaler = StandardScaler()
-                Xtr_s = scaler.fit_transform(Xtr_f)
-                Xts_s = scaler.transform(Xts_f)
-                modelo = tf.keras.Sequential([
-                    tf.keras.layers.Input(shape=(len(req.x_cols),)),
-                    tf.keras.layers.Dense(16, activation="relu"),
-                    tf.keras.layers.Dense(8, activation="relu"),
-                    tf.keras.layers.Dense(len(clases), activation="softmax"),
-                ])
-                modelo.compile(optimizer=tf.keras.optimizers.Adam(0.01),
-                               loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-                modelo.fit(Xtr_s, ytr_c, epochs=150, verbose=0)
-                _, acc = modelo.evaluate(Xts_s, yts_c, verbose=0)
-                session["tf_model"] = modelo
-                session["tf_scaler"] = scaler
-                session["tf_es_clasificacion"] = True
-                session["tf_clases"] = clases
-                session["last_model"] = modelo
-                session["last_class_labels"] = clases
-                session["is_regression"] = False
-                result = {"model": "TensorFlow Neural Net", "type": "classification",
-                          "metrics": {"accuracy": round(acc * 100, 2)}, "summary": f"Exactitud: {acc*100:.2f}%",
-                          "clases": clases.tolist()}
-            else:
-                ytr_f = y_train.astype(float)
-                yts_f = y_test.astype(float)
-                modelo = tf.keras.Sequential([tf.keras.layers.Dense(units=1, input_shape=[len(req.x_cols)])])
-                modelo.compile(optimizer=tf.keras.optimizers.Adam(0.1), loss="mean_squared_error")
-                modelo.fit(Xtr_f, ytr_f, epochs=500, verbose=0)
-                r2 = metrics.r2_score(yts_f, modelo.predict(Xts_f, verbose=0).flatten())
-                session["tf_model"] = modelo
-                session["tf_scaler"] = None
-                session["tf_es_clasificacion"] = False
-                session["tf_clases"] = None
-                session["last_model"] = modelo
-                session["is_regression"] = True
-                result = {"model": "TensorFlow Neural Net", "type": "regression",
-                          "metrics": {"r2": round(r2, 4)}, "summary": f"R2: {r2:.4f}"}
-
-            session["tf_trained_x_cols"] = req.x_cols
-            session["tf_trained_y_col"] = req.y_col
-
         else:
             raise HTTPException(status_code=400, detail=f"Modelo desconocido: {k}")
 
@@ -442,22 +374,6 @@ def predict(req: PredictRequest):
 
     try:
         dato = np.array([req.values])
-
-        if TENSORFLOW_AVAILABLE and hasattr(tf, "keras") and isinstance(modelo, tf.keras.Model):
-            if session["tf_es_clasificacion"]:
-                scaler = session["tf_scaler"]
-                dato_s = scaler.transform(dato.astype(float))
-                probs = modelo.predict(dato_s, verbose=0)[0]
-                idx = int(np.argmax(probs))
-                clases = session["tf_clases"]
-                return {
-                    "prediction": str(clases[idx]),
-                    "type": "classification",
-                    "probabilities": {str(clases[i]): round(float(p), 6) for i, p in enumerate(probs)},
-                }
-            else:
-                pred = modelo.predict(dato.astype(float), verbose=0)
-                return {"prediction": round(float(pred[0][0]), 4), "type": "regression"}
 
         poly = session.get("poly_transformer")
         if poly is not None:
@@ -496,14 +412,7 @@ def get_metrics(session_id: str):
     y_test = session["last_y_test"]
 
     try:
-        if TENSORFLOW_AVAILABLE and hasattr(tf, "keras") and isinstance(modelo, tf.keras.Model):
-            if not session["is_regression"]:
-                probs = modelo.predict(X_test, verbose=0)
-                y_pred = np.argmax(probs, axis=1)
-            else:
-                y_pred = modelo.predict(X_test, verbose=0).flatten()
-        else:
-            y_pred = modelo.predict(X_test)
+        y_pred = modelo.predict(X_test)
 
         if session["is_regression"]:
             return {

@@ -25,7 +25,6 @@ const CLASSIFICATION_MODELS = [
   { key: 'adaboost',                 label: 'AdaBoost',            desc: 'Ponderacion adaptativa' },
   { key: 'perceptron',               label: 'Perceptron',          desc: 'Neurona lineal binaria' },
   { key: 'mlp_classifier',           label: 'MLP',                 desc: 'Red neuronal 10x10' },
-  { key: 'tensorflow_nn',            label: 'TensorFlow NN',       desc: 'Red profunda 16-8' },
 ]
 
 const PAGE_SIZES = [10, 25, 50, 100]
@@ -599,7 +598,7 @@ export default function App() {
                       <div className="text-center">
                         <p className="font-bold text-gray-800 dark:text-gray-200 mb-1">Entrenando modelo</p>
                         <p className="text-sm text-gray-400 dark:text-gray-600">
-                          {activeModel === 'tensorflow_nn' ? 'Red neuronal — puede tardar 20-60 segundos...' : activeModel === 'mlp_classifier' ? 'Perceptron multicapa — espera un momento...' : 'Calculando...'}
+                          {activeModel === 'mlp_classifier' ? 'Perceptron multicapa — espera un momento...' : 'Calculando...'}
                         </p>
                       </div>
                     </div>
@@ -733,7 +732,7 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {CLASSIFICATION_MODELS.map(m => (
-                        <ModelCard key={m.key} model={m} color={m.key === 'tensorflow_nn' ? 'bg-orange-500' : 'bg-violet-500'} active={activeModel === m.key} loading={training} result={modelResults[m.key]} onClick={() => runModel(m.key)} />
+                        <ModelCard key={m.key} model={m} color='bg-violet-500' active={activeModel === m.key} loading={training} result={modelResults[m.key]} onClick={() => runModel(m.key)} />
                       ))}
                     </div>
                   </div>
